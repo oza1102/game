@@ -1,8 +1,9 @@
 <!DOCTYPE html>
+
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>3Dオセロ</title>
+<title>3Dオセロ AI対戦</title>
 
 <style>
 body{
@@ -10,7 +11,7 @@ margin:0;
 background:#111;
 color:white;
 font-family:sans-serif;
-text-align:center;
+overflow:hidden;
 }
 
 #info{
@@ -20,8 +21,17 @@ left:10px;
 font-size:18px;
 }
 
-canvas{
-display:block;
+#score{
+position:absolute;
+top:40px;
+left:10px;
+}
+
+button{
+position:absolute;
+top:70px;
+left:10px;
+padding:6px 12px;
 }
 </style>
 
@@ -29,16 +39,31 @@ display:block;
 
 <body>
 
-<div id="info">3Dオセロ（黒の番）</div>
+<div id="info">あなた（黒）の番</div>
+<div id="score"></div>
+<button onclick="init()">リスタート</button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
 
 <script>
 
-const scene=new THREE.Scene()
+const info=document.getElementById("info")
+const score=document.getElementById("score")
 
-const camera=new THREE.PerspectiveCamera(
+let scene,camera,renderer,controls
+let board=[]
+let disks=[]
+let tiles=[]
+let player=1
+let ai=-1
+
+function init(){
+
+scene=new THREE.Scene()
+
+camera=new THREE.PerspectiveCamera(
 45,
 window.innerWidth/window.innerHeight,
 0.1,
@@ -47,40 +72,55 @@ window.innerWidth/window.innerHeight,
 
 camera.position.set(6,8,10)
 
-const renderer=new THREE.WebGLRenderer({antialias:true})
+renderer=new THREE.WebGLRenderer({antialias:true})
+
 renderer.setSize(window.innerWidth,window.innerHeight)
+
+document.body.innerHTML=""
 document.body.appendChild(renderer.domElement)
-
-const controls=new THREE.OrbitControls(camera,renderer.domElement)
-
-controls.enableDamping=true
+document.body.appendChild(info)
+document.body.appendChild(score)
 
 const light=new THREE.DirectionalLight(0xffffff,1)
 light.position.set(5,10,7)
 scene.add(light)
 
-const ambient=new THREE.AmbientLight(0x888888)
-scene.add(ambient)
+scene.add(new THREE.AmbientLight(0x888888))
 
-const board=[]
+controls=new THREE.OrbitControls(camera,renderer.domElement)
+
+createBoard()
+
+animate()
+
+}
+
+function createBoard(){
+
+board=Array(8).fill().map(()=>Array(8).fill(0))
 
 const tileGeo=new THREE.BoxGeometry(1,0.2,1)
 const tileMat=new THREE.MeshPhongMaterial({color:0x0a7a2f})
 
 for(let y=0;y<8;y++){
-board[y]=[]
-
 for(let x=0;x<8;x++){
 
 const tile=new THREE.Mesh(tileGeo,tileMat)
 
 tile.position.set(x-3.5,0,y-3.5)
 
+tile.userData={x,y}
+
 scene.add(tile)
 
-board[y][x]=0
+tiles.push(tile)
 
-}
+}}
+
+place(3,3,-1)
+place(4,4,-1)
+place(3,4,1)
+place(4,3,1)
 
 }
 
@@ -89,7 +129,7 @@ const diskGeo=new THREE.CylinderGeometry(0.4,0.4,0.15,32)
 function createDisk(color,x,y){
 
 const mat=new THREE.MeshPhongMaterial({
-color: color==1?0x000000:0xffffff
+color:color==1?0x000000:0xffffff
 })
 
 const disk=new THREE.Mesh(diskGeo,mat)
@@ -102,30 +142,15 @@ return disk
 
 }
 
-const disks=[]
-
-function placeInitial(){
-
-place(3,3,-1)
-place(4,4,-1)
-place(3,4,1)
-place(4,3,1)
-
-}
-
 function place(x,y,color){
 
 board[y][x]=color
 
 const disk=createDisk(color,x,y)
 
-disks.push(disk)
+disks.push({mesh:disk,x,y,color})
 
 }
-
-placeInitial()
-
-let player=1
 
 const raycaster=new THREE.Raycaster()
 const mouse=new THREE.Vector2()
@@ -139,44 +164,85 @@ mouse.y=-(event.clientY/window.innerHeight)*2+1
 
 raycaster.setFromCamera(mouse,camera)
 
-const intersects=raycaster.intersectObjects(scene.children)
+const intersects=raycaster.intersectObjects(tiles)
 
-for(let i of intersects){
+if(intersects.length>0){
 
-const pos=i.object.position
+const {x,y}=intersects[0].object.userData
 
-const x=Math.round(pos.x+3.5)
-const y=Math.round(pos.z+3.5)
-
-if(x>=0&&x<8&&y>=0&&y<8){
-
-if(board[y][x]==0){
-
-place(x,y,player)
-
-player*=-1
+playerMove(x,y)
 
 }
 
 }
 
+function playerMove(x,y){
+
+let flips=getFlips(board,x,y,player)
+
+if(flips.length==0)return
+
+applyMove(board,x,y,player)
+
+draw()
+
+setTimeout(aiMove,500)
+
+}
+
+function aiMove(){
+
+let move=getMoves(board,ai)[0]
+
+if(move){
+
+applyMove(board,move.x,move.y,ai)
+
+draw()
+
 }
 
 }
 
-function animate(){
+function applyMove(b,x,y,color){
 
-requestAnimationFrame(animate)
+let flips=getFlips(b,x,y,color)
 
-controls.update()
+b[y][x]=color
 
-renderer.render(scene,camera)
+flips.forEach(f=>{
+b[f.y][f.x]=color
+})
 
 }
 
-animate()
+function draw(){
 
-</script>
+disks.forEach(d=>scene.remove(d.mesh))
 
-</body>
-</html>
+disks=[]
+
+let black=0
+let white=0
+
+for(let y=0;y<8;y++){
+for(let x=0;x<8;x++){
+
+if(board[y][x]!=0){
+
+const disk=createDisk(board[y][x],x,y)
+
+disks.push({mesh:disk,x,y,color:board[y][x]})
+
+if(board[y][x]==1)black++
+else white++
+
+}
+
+}}
+
+score.textContent="黒:"+black+" 白:"+white
+
+}
+
+f
