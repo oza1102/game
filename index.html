@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>オセロ AI対戦</title>
+
+<style>
+body{
+background:#1e272e;
+color:white;
+text-align:center;
+font-family:sans-serif;
+}
+
+h1{
+margin-top:20px;
+}
+
+#board{
+display:grid;
+grid-template-columns:repeat(8,70px);
+grid-template-rows:repeat(8,70px);
+width:560px;
+margin:20px auto;
+background:#0a7a2f;
+}
+
+.cell{
+border:1px solid #003300;
+display:flex;
+justify-content:center;
+align-items:center;
+cursor:pointer;
+}
+
+.disk{
+width:55px;
+height:55px;
+border-radius:50%;
+transition:transform 0.5s;
+}
+
+.black{
+background:black;
+}
+
+.white{
+background:white;
+}
+
+.flip{
+transform:rotateY(180deg);
+}
+
+#info{
+font-size:18px;
+margin:10px;
+}
+
+#score{
+margin:10px;
+}
+
+button{
+padding:8px 16px;
+font-size:16px;
+cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>AIオセロ</h1>
+
+<div id="info">あなた（黒）の番</div>
+<div id="score"></div>
+
+<div id="board"></div>
+
+<button onclick="init()">リスタート</button>
+
+<script>
+
+const boardEl=document.getElementById("board")
+const info=document.getElementById("info")
+const scoreEl=document.getElementById("score")
+
+let board=[]
+let player=1
+let ai=-1
+
+function init(){
+
+board=Array(8).fill().map(()=>Array(8).fill(0))
+
+board[3][3]=-1
+board[3][4]=1
+board[4][3]=1
+board[4][4]=-1
+
+draw()
+
+}
+
+function draw(){
+
+boardEl.innerHTML=""
+
+let black=0
+let white=0
+
+for(let y=0;y<8;y++){
+for(let x=0;x<8;x++){
+
+const cell=document.createElement("div")
+cell.className="cell"
+cell.onclick=()=>playerMove(x,y)
+
+if(board[y][x]!=0){
+
+const disk=document.createElement("div")
+disk.className="disk "+(board[y][x]==1?"black":"white")
+
+cell.appendChild(disk)
+
+if(board[y][x]==1) black++
+else white++
+
+}
+
+boardEl.appendChild(cell)
+
+}}
+
+scoreEl.textContent="黒："+black+"　白："+white
+
+}
+
+function playerMove(x,y){
+
+let flips=getFlips(board,x,y,player)
+
+if(flips.length==0) return
+
+place(board,x,y,player)
+
+draw()
+
+setTimeout(aiMove,400)
+
+}
+
+function aiMove(){
+
+let move=minimaxRoot(board,3,ai)
+
+if(move){
+
+place(board,move.x,move.y,ai)
+
+draw()
+
+}
+
+checkGame()
+
+}
+
+function place(b,x,y,color){
+
+let flips=getFlips(b,x,y,color)
+
+b[y][x]=color
+
+flips.forEach(f=>{
+b[f.y][f.x]=color
+})
+
+}
+
+function getFlips(b,x,y,color){
+
+if(b[y][x]!=0)return[]
+
+const dirs=[
+[1,0],[-1,0],[0,1],[0,-1],
+[1,1],[-1,-1],[1,-1],[-1,1]
+]
+
+let result=[]
+
+dirs.forEach(d=>{
+
+let nx=x+d[0]
+let ny=y+d[1]
+let temp=[]
+
+while(nx>=0 && nx<8 && ny>=0 && ny<8){
+
+if(b[ny][nx]==-color){
+temp.push({x:nx,y:ny})
+}
+else if(b[ny][nx]==color){
+result=result.concat(temp)
+break
+}
+else{
+break
+}
+
+nx+=d[0]
+ny+=d[1]
+
+}
+
+})
+
+return result
+
+}
+
+function getMoves(b,color){
+
+let moves=[]
+
+for(let y=0;y<8;y++){
+for(let x=0;x<8;x++){
+
+if(getFlips(b,x,y,color).length>0){
+moves.push({x,y})
+}
+
+}}
+
+return moves
+
+}
+
+function cloneBoard(b){
+return b.map(r=>r.slice())
+}
+
+function evaluate(b){
+
+let score=0
+
+for(let y=0;y<8;y++){
+for(let x=0;x<8;x++){
+
+score+=b[y][x]
+
+}}
+
+return score
+
+}
+
+function minimaxRoot(board,depth,color){
+
+let moves=getMoves(board,color)
+
+let bestScore=-9999
+let bestMove=null
+
+moves.forEach(m=>{
+
+let newBoard=cloneBoard(board)
+
+place(newBoard,m.x,m.y,color)
+
+let score=minimax(newBoard,depth-1,-color)
+
+if(score>bestScore){
+
+bestScore=score
+bestMove=m
+
+}
+
+})
+
+return bestMove
+
+}
+
+function minimax(board,depth,color){
+
+if(depth==0){
+return evaluate(board)*color
+}
+
+let moves=getMoves(board,color)
+
+if(moves.length==0){
+return evaluate(board)*color
+}
+
+let best=-9999
+
+moves.forEach(m=>{
+
+let newBoard=cloneBoard(board)
+
+place(newBoard,m.x,m.y,color)
+
+let score=-minimax(newBoard,depth-1,-color)
+
+if(score>best){
+best=score
+}
+
+})
+
+return best
+
+}
+
+function checkGame(){
+
+let moves1=getMoves(board,player)
+let moves2=getMoves(board,ai)
+
+if(moves1.length==0 && moves2.length==0){
+
+let black=0
+let white=0
+
+for(let y=0;y<8;y++){
+for(let x=0;x<8;x++){
+
+if(board[y][x]==1)black++
+if(board[y][x]==-1)white++
+
+}}
+
+if(black>white) info.textContent="あなたの勝ち！"
+else if(white>black) info.textContent="AIの勝ち！"
+else info.textContent="引き分け！"
+
+}
+
+}
+
+init()
+
+</script>
+
+</body>
+</html>
